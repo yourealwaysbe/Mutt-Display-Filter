@@ -1,0 +1,101 @@
+#!/usr/bin/python
+
+import sys, re
+
+re_list_start = re.compile("([Tt][Oo]|[Cc][Cc]):.*")
+re_list_continue = re.compile("[ \t].*")
+re_means_show = re.compile("([Rr][Ee][Cc][Ee][Ii][Vv][Ee][Dd]:.*"
+                           "|[Mm]essage-[Ii][Dd]:.*)")
+re_means_hide = re.compile("$")
+
+
+
+HIDE, UNDETERMINED, SHOW = range(3)
+show = UNDETERMINED
+
+NOTIN, JUST_ENTERED, FULLY_IN = range(3)
+JUST_ENTERED_SIZE = 2
+in_list_block = NOTIN
+just_entered_count = 0
+
+show_line_buffer = ''
+hide_line_buffer = ''
+
+FIRST_OMITTED_LINE = "    ...\n"
+OTHER_OMITTED_LINE = ""
+MAX_LEN = 75
+OMITTED_END = " ...\n"
+
+
+def show_buffer(line): 
+    global show_line_buffer
+    show_line_buffer = ''.join([show_line_buffer, line])
+
+def hide_buffer(line):
+    global hide_line_buffer
+    hide_line_buffer = ''.join([hide_line_buffer, line])
+
+def flush_buffer(show):
+    global show_line_buffer, hide_line_buffer
+    if show:
+        sys.stdout.write(show_line_buffer)
+    else:
+        sys.stdout.write(hide_line_buffer)
+    show_line_buffer = ''
+    hide_line_buffer = ''
+
+def write_line(line_show, line_hide):
+    global show
+    if show == SHOW:
+        sys.stdout.write(line_show)
+    elif show == HIDE:
+        sys.stdout.write(line_hide)
+    elif show == UNDETERMINED:
+        show_buffer(line_show)
+        hide_buffer(line_hide)
+
+
+def do_filter():
+    global in_list_block, show, just_entered_count
+    for s in sys.stdin:
+        if show == UNDETERMINED:
+            if re_means_show.match(s):
+                flush_buffer(True)
+                show = SHOW
+            elif re_means_hide.match(s):
+                flush_buffer(False)
+                show = HIDE
+
+        if in_list_block == JUST_ENTERED:
+            if re_list_continue.match(s):
+                just_entered_count += 1
+                if just_entered_count == JUST_ENTERED_SIZE:
+                    in_list_block = FULLY_IN
+                    just_entered_count = 0
+                    write_line(s, FIRST_OMITTED_LINE)
+                else:
+                    write_line(s, s)
+            else:
+                in_list_block = NOTIN
+        elif in_list_block == FULLY_IN:
+             if re_list_continue.match(s):
+                in_list_block = FULLY_IN
+                write_line(s, OTHER_OMITTED_LINE)
+             else:
+                in_list_block = NOTIN
+ 
+        if in_list_block == NOTIN:
+            if re_list_start.match(s):
+                in_list_block = JUST_ENTERED
+                if len(s) > MAX_LEN:
+                    s = s[0:MAX_LEN] + OMITTED_END
+                write_line(s, s)
+            else:
+                write_line(s, s)
+  
+    if show == UNDETERMINED:
+        flush_buffer(True)
+
+
+
+do_filter()
